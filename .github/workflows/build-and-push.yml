@@ -1,13 +1,13 @@
 name: build-and-push
 
-run-name: 构建镜像并推送仓库 ${{ github.event.inputs.dockerImageTag }} (${{ github.event.inputs.registry }}) (${{ github.event.inputs.architecture }})
+run-name: 构建镜像并推送仓库 ${{ github.event.inputs.dockerImageTag }} (${{ github.event.inputs.registry }})
 
 on:
   workflow_dispatch:
     inputs:
       dockerImageTag:
         description: 'Image Tag'
-        default: 'v2.2.0-dev'
+        default: 'v1.10.7-dev'
         required: true
       dockerImageTagWithLatest:
         description: '是否发布latest tag（正式发版时选择，测试版本切勿选择）'
@@ -38,14 +38,9 @@ jobs:
     if: ${{ contains(github.event.inputs.registry, 'fit2cloud') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Clear Work Dir
-        run: |
-          ls -la
-          rm -rf -- ./* ./.??*
       - name: Check Disk Space
         run: df -h
       - name: Free Disk Space (Ubuntu)
-        if: ${{ contains(github.event.inputs.architecture, ',') }}
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
@@ -53,8 +48,8 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: false
-          swap-storage: false
+          docker-images: true
+          swap-storage: true
       - name: Check Disk Space
         run: df -h
       - name: Checkout
@@ -69,17 +64,15 @@ jobs:
           TAG_NAME=${{ github.event.inputs.dockerImageTag }}
           TAG_NAME_WITH_LATEST=${{ github.event.inputs.dockerImageTagWithLatest }}
           if [[ ${TAG_NAME_WITH_LATEST} == 'true' ]]; then            
-            DOCKER_IMAGE_TAGS="--tag ${DOCKER_IMAGE}:${TAG_NAME} --tag ${DOCKER_IMAGE}:${TAG_NAME%%.*} --tag ${DOCKER_IMAGE}:latest"
+            DOCKER_IMAGE_TAGS="--tag ${DOCKER_IMAGE}:${TAG_NAME} --tag ${DOCKER_IMAGE}:${TAG_NAME%%.*}"
           else
             DOCKER_IMAGE_TAGS="--tag ${DOCKER_IMAGE}:${TAG_NAME}"
           fi
-          echo "buildx_args=--platform ${DOCKER_PLATFORMS} --memory-swap -1 \
+          echo ::set-output name=buildx_args::--platform ${DOCKER_PLATFORMS} --memory-swap -1 \
             --build-arg DOCKER_IMAGE_TAG=${{ github.event.inputs.dockerImageTag }} --build-arg BUILD_AT=$(TZ=Asia/Shanghai date +'%Y-%m-%dT%H:%M') --build-arg GITHUB_COMMIT=`git rev-parse --short HEAD` --no-cache \
-            ${DOCKER_IMAGE_TAGS} ." >> $GITHUB_OUTPUT
+            ${DOCKER_IMAGE_TAGS} .
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          cache-image: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GitHub Container Registry
@@ -94,12 +87,6 @@ jobs:
           registry: ${{ secrets.FIT2CLOUD_REGISTRY_HOST }}
           username: ${{ secrets.FIT2CLOUD_REGISTRY_USERNAME }}
           password: ${{ secrets.FIT2CLOUD_REGISTRY_PASSWORD }}
-      - name: Build Web
-        run: |
-          docker buildx build --no-cache --target web-build --output type=local,dest=./web-build-output . -f installer/Dockerfile
-          rm -rf ./ui
-          cp -r ./web-build-output/ui ./
-          rm -rf ./web-build-output
       - name: Docker Buildx (build-and-push)
         run: |
           sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches && free -m
@@ -109,14 +96,9 @@ jobs:
     if: ${{ contains(github.event.inputs.registry, 'dockerhub') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Clear Work Dir
-        run: |
-          ls -la
-          rm -rf -- ./* ./.??*
       - name: Check Disk Space
         run: df -h
       - name: Free Disk Space (Ubuntu)
-        if: ${{ contains(github.event.inputs.architecture, ',') }}
         uses: jlumbroso/free-disk-space@main
         with:
           tool-cache: true
@@ -124,8 +106,8 @@ jobs:
           dotnet: true
           haskell: true
           large-packages: true
-          docker-images: false
-          swap-storage: false
+          docker-images: true
+          swap-storage: true
       - name: Check Disk Space
         run: df -h
       - name: Checkout
@@ -140,17 +122,15 @@ jobs:
           TAG_NAME=${{ github.event.inputs.dockerImageTag }}          
           TAG_NAME_WITH_LATEST=${{ github.event.inputs.dockerImageTagWithLatest }}
           if [[ ${TAG_NAME_WITH_LATEST} == 'true' ]]; then            
-            DOCKER_IMAGE_TAGS="--tag ${DOCKER_IMAGE}:${TAG_NAME} --tag ${DOCKER_IMAGE}:${TAG_NAME%%.*} --tag ${DOCKER_IMAGE}:latest"
+            DOCKER_IMAGE_TAGS="--tag ${DOCKER_IMAGE}:${TAG_NAME} --tag ${DOCKER_IMAGE}:${TAG_NAME%%.*}"
           else
             DOCKER_IMAGE_TAGS="--tag ${DOCKER_IMAGE}:${TAG_NAME}"
           fi
-          echo "buildx_args=--platform ${DOCKER_PLATFORMS} --memory-swap -1 \
+          echo ::set-output name=buildx_args::--platform ${DOCKER_PLATFORMS} --memory-swap -1 \
             --build-arg DOCKER_IMAGE_TAG=${{ github.event.inputs.dockerImageTag }} --build-arg BUILD_AT=$(TZ=Asia/Shanghai date +'%Y-%m-%dT%H:%M') --build-arg GITHUB_COMMIT=`git rev-parse --short HEAD` --no-cache \
-            ${DOCKER_IMAGE_TAGS} ." >> $GITHUB_OUTPUT
+            ${DOCKER_IMAGE_TAGS} .
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          cache-image: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GitHub Container Registry
@@ -164,12 +144,6 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Build Web
-        run: |
-          docker buildx build --no-cache --target web-build --output type=local,dest=./web-build-output . -f installer/Dockerfile
-          rm -rf ./ui
-          cp -r ./web-build-output/ui ./
-          rm -rf ./web-build-output
       - name: Docker Buildx (build-and-push)
         run: |
           sudo sync && echo 3 | sudo tee /proc/sys/vm/drop_caches && free -m
